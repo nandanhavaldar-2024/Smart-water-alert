@@ -1,0 +1,154 @@
+
+// --- ▼▼▼ BLYNK CONFIGURATION (MUST COME FIRST) ▼▼▼ ---
+#define BLYNK_TEMPLATE_ID "TMPL3PtvqNjXQ"
+#define BLYNK_TEMPLATE_NAME "water level Alert"
+#define BLYNK_AUTH_TOKEN "dZyzghQtlYr7mBYKrB-Opr1flzhgxVaX"
+// --- ▲▲▲ END OF BLYNK CONFIGURATION ▲▲▲ ---
+
+// --- Include Libraries ---
+#include <LiquidCrystal_I2C.h>
+#include <Adafruit_NeoPixel.h>
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+// --- Wi-Fi Credentials ---
+char ssid[] = "Wokwi-GUEST";   // For Wokwi simulation
+char pass[] = "";              // No password for Wokwi
+
+// --- Pin Configuration ---
+const int TRIG_PIN = 13;
+const int ECHO_PIN = 12;
+const int NEOPIXEL_PIN = 27;
+const int BUZZER_PIN = 33;
+const int MUTE_BUTTON_PIN = 32;
+
+// --- Water Level Thresholds (in cm) ---
+const int NORMAL_LEVEL = 200;
+const int CAUTION_LEVEL = 100;
+const int DANGER_LEVEL = 50;
+
+// --- Tank Geometry (for percentage calculation) ---
+const int TANK_EMPTY_DISTANCE = 250; 
+const int TANK_FULL_DISTANCE = 50;   
+
+const int NUM_SAMPLES = 10;
+
+// --- Blynk Virtual Pin Definitions ---
+#define VPIN_WATER_LEVEL  V0
+#define VPIN_MUTE_BUTTON  V2 
+
+// --- Initialize Components ---
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+Adafruit_NeoPixel pixels(1, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+
+// --- Global Variables ---
+bool isMuted = false;
+bool dangerNotificationSent = false;
+BlynkTimer timer; 
+
+BLYNK_WRITE(VPIN_MUTE_BUTTON) {
+  int buttonState = param.asInt(); 
+  if (buttonState == 1) { isMuted = true; } 
+  else { isMuted = false; }
+}
+
+void checkWaterLevel() {
+  long duration;
+  int distance;
+  long totalDistance = 0;
+  for (int i = 0; i < NUM_SAMPLES; i++) {
+    digitalWrite(TRIG_PIN, LOW); delayMicroseconds(2);
+    digitalWrite(TRIG_PIN, HIGH); delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+    duration = pulseIn(ECHO_PIN, HIGH);
+    totalDistance += duration * 0.034 / 2;
+    delay(20);
+  }
+  distance = totalDistance / NUM_SAMPLES;
+
+  int waterLevelPercent = map(distance, TANK_EMPTY_DISTANCE, TANK_FULL_DISTANCE, 0, 100);
+  waterLevelPercent = constrain(waterLevelPercent, 0, 100);
+  Blynk.virtualWrite(VPIN_WATER_LEVEL, waterLevelPercent);
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+
+  if (distance > NORMAL_LEVEL) {
+    lcd.print("Level: NORMAL ");
+    pixels.setPixelColor(0, pixels.Color(0, 150, 0));
+    noTone(BUZZER_PIN);
+    isMuted = false;
+    dangerNotificationSent = false;
+  }
+  else if (distance > DANGER_LEVEL) {
+    lcd.print("Level: CAUTION!");
+    pixels.setPixelColor(0, pixels.Color(200, 150, 0));
+    noTone(BUZZER_PIN);
+    isMuted = false;
+    dangerNotificationSent = false;
+  }
+  else {
+    lcd.print("Level: DANGER!");
+    pixels.setPixelColor(0, pixels.Color(255, 0, 0));
+    if (!isMuted) { tone(BUZZER_PIN, 1000); }
+    if (!dangerNotificationSent) {
+      Blynk.logEvent("DANGER_ALERT", "Water level is critical!"); 
+      dangerNotificationSent = true;
+    }
+  }
+  pixels.show();
+
+  if (isMuted && distance <= DANGER_LEVEL) {
+    noTone(BUZZER_PIN);
+    lcd.setCursor(0, 0);
+    lcd.print("ALARM MUTED!");
+  }
+  
+  lcd.setCursor(0, 1);
+  lcd.print("Dist: ");
+  lcd.print(distance);
+  lcd.print(" cm");
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Water Level Warn");
+  lcd.setCursor(0, 1);
+  lcd.print("Connecting...");
+
+  pixels.begin();
+  pixels.clear();
+  pixels.show();
+
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(MUTE_BUTTON_PIN, INPUT_PULLUP);
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+  
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("System Ready!");
+  delay(1500);
+
+  timer.setInterval(1000L, checkWaterLevel);
+}
+
+void loop() {
+  Blynk.run();
+  timer.run(); 
+
+  if (digitalRead(MUTE_BUTTON_PIN) == LOW) {
+    if (!isMuted) { 
+      isMuted = true;
+      Blynk.virtualWrite(VPIN_MUTE_BUTTON, 1); 
+    }
+    delay(200); 
+  }
+}
