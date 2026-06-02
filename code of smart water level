@@ -1,26 +1,26 @@
 
 // --- ▼▼▼ BLYNK CONFIGURATION (MUST COME FIRST) ▼▼▼ ---
-#define BLYNK_TEMPLATE_ID "TMPL3PtvqNjXQ"
-#define BLYNK_TEMPLATE_NAME "water level Alert"
-#define BLYNK_AUTH_TOKEN "dZyzghQtlYr7mBYKrB-Opr1flzhgxVaX"
+#define BLYNK_TEMPLATE_ID "TMPL3PtvqNjXQ"    //unique digital blueprint ID specific virtual layout
+#define BLYNK_TEMPLATE_NAME "water level Alert"  //human-readable name
+#define BLYNK_AUTH_TOKEN "dZyzghQtlYr7mBYKrB-Opr1flzhgxVaX"   //unique secure password for your specific hardware device
 // --- ▲▲▲ END OF BLYNK CONFIGURATION ▲▲▲ ---
 
 // --- Include Libraries ---
-#include <LiquidCrystal_I2C.h>
+#include <LiquidCrystal_I2C.h>      //control the LCD screen over the I2C bus
 #include <Adafruit_NeoPixel.h>
-#include <WiFi.h>
-#include <BlynkSimpleEsp32.h>
+#include <WiFi.h>                   // internet connectivity for ESP32 borad 
+#include <BlynkSimpleEsp32.h>      //Blynk IoT platform library
 
 // --- Wi-Fi Credentials ---
 char ssid[] = "Wokwi-GUEST";   // For Wokwi simulation
 char pass[] = "";              // No password for Wokwi
 
 // --- Pin Configuration ---
-const int TRIG_PIN = 13;
-const int ECHO_PIN = 12;
-const int NEOPIXEL_PIN = 27;
-const int BUZZER_PIN = 33;
-const int MUTE_BUTTON_PIN = 32;
+const int TRIG_PIN = 13;           // triger pin for sensore ( HC-SR04)
+const int ECHO_PIN = 12;           // Echo pin for sensor ( HC-SR04)
+const int NEOPIXEL_PIN = 27;       // WS2812B Addressable RGB LED (NeoPixel)
+const int BUZZER_PIN = 33;         // output pin 
+const int MUTE_BUTTON_PIN = 32;    // input pin 
 
 // --- Water Level Thresholds (in cm) ---
 const int NORMAL_LEVEL = 200;
@@ -31,11 +31,11 @@ const int DANGER_LEVEL = 50;
 const int TANK_EMPTY_DISTANCE = 250; 
 const int TANK_FULL_DISTANCE = 50;   
 
-const int NUM_SAMPLES = 10;
+const int NUM_SAMPLES = 10;    // 10-sample window to eliminate high-frequency signal noise and water ripple artifacts,  before making the final decision 
 
 // --- Blynk Virtual Pin Definitions ---
-#define VPIN_WATER_LEVEL  V0
-#define VPIN_MUTE_BUTTON  V2 
+#define VPIN_WATER_LEVEL  V0    //transmitter channel , Hardware -> Cloud (Outgoing Data)
+#define VPIN_MUTE_BUTTON  V2   // receiver channel,  Cloud  -> Hardware  (Incoming Contro)
 
 // --- Initialize Components ---
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -61,7 +61,7 @@ void checkWaterLevel() {
     digitalWrite(TRIG_PIN, HIGH); delayMicroseconds(10);
     digitalWrite(TRIG_PIN, LOW);
     duration = pulseIn(ECHO_PIN, HIGH);
-    totalDistance += duration * 0.034 / 2;
+    totalDistance += duration * 0.034 / 2;   //sound travel throug air is 343m/s 
     delay(20);
   }
   distance = totalDistance / NUM_SAMPLES;
